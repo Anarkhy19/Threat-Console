@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threat Triage Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #0E1320;
+    --bg-panel: #171D2C;
+    --bg-panel-raised: #1E2637;
+    --bg-hover: #242D42;
+    --border: #2A3348;
+    --text-primary: #E7EAF1;
+    --text-secondary: #9AA4B8;
+    --text-muted: #626E85;
+
+    --sig-amber: #F0A742;
+    --sig-amber-dim: rgba(240, 167, 66, 0.16);
+    --sev-critical: #E5493C;
+    --sev-critical-dim: rgba(229, 73, 60, 0.14);
+    --sev-high: #F0A742;
+    --sev-high-dim: rgba(240, 167, 66, 0.14);
+    --sev-medium: #E3C765;
+    --sev-medium-dim: rgba(227, 199, 101, 0.12);
+    --sev-low: #4D9E73;
+    --sev-low-dim: rgba(77, 158, 115, 0.12);
+
+    --accent-cool: #59B7C9;
+    --accent-cool-dim: rgba(89, 183, 201, 0.14);
+
+    --font-display: 'Space Grotesk', 'Segoe UI', sans-serif;
+    --font-body: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    min-height: 100vh;
+  }
+
+  /* ---------- Header ---------- */
+  .app-header {
+    padding: 20px 28px 16px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #12182A 0%, #0E1320 100%);
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sig-amber);
+    margin: 0 0 6px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0 0 16px;
+    letter-spacing: -0.01em;
+  }
+  .stat-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .stat-chip {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    min-width: 120px;
+  }
+  .stat-chip .label {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-family: var(--font-mono);
+  }
+  .stat-chip .value {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 2px;
+  }
+  .stat-chip .value.good { color: var(--sev-low); }
+
+  /* ---------- Layout ---------- */
+  .app-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 1px;
+    background: var(--border);
+    min-height: calc(100vh - 128px);
+  }
+  @media (max-width: 860px) {
+    .app-body { grid-template-columns: 1fr; }
+  }
+
+  .panel { background: var(--bg-base); display: flex; flex-direction: column; min-width: 0; }
+
+  /* ---------- Controls ---------- */
+  .controls {
+    display: flex;
+    gap: 8px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .search-input {
+    flex: 1;
+    min-width: 140px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  .search-input:focus { outline: 2px solid var(--accent-cool); outline-offset: 1px; }
+  select.filter-select {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+  .result-count {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-muted);
+    padding: 0 20px 10px;
+  }
+
+  /* ---------- Alert list ---------- */
+  .alert-list { overflow-y: auto; flex: 1; }
+  .alert-row {
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    position: relative;
+    transition: background 0.12s ease;
+  }
+  .alert-row:hover { background: var(--bg-hover); }
+  .alert-row.selected { background: var(--bg-panel-raised); }
+  .alert-row.selected::before {
+    content: "";
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent-cool);
+  }
+  .rank-badge {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .row-main .label-line {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+  }
+  .attack-label {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 14.5px;
+  }
+  .sev-pill {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+  }
+  .sev-critical { color: var(--sev-critical); background: var(--sev-critical-dim); border-color: color-mix(in srgb, var(--sev-critical) 40%, transparent); }
+  .sev-high { color: var(--sev-high); background: var(--sev-high-dim); border-color: color-mix(in srgb, var(--sev-high) 40%, transparent); }
+  .sev-medium { color: var(--sev-medium); background: var(--sev-medium-dim); border-color: color-mix(in srgb, var(--sev-medium) 40%, transparent); }
+  .sev-low { color: var(--sev-low); background: var(--sev-low-dim); border-color: color-mix(in srgb, var(--sev-low) 40%, transparent); }
+  .row-meta {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+  .priority-dial { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .priority-dial .pscore { font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+  .priority-dial .plabel { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-muted); text-transform: uppercase; }
+
+  .pulse-critical { animation: pulseGlow 2.2s ease-in-out infinite; }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: inset 3px 0 0 0 var(--sev-critical); }
+    50% { box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--sev-critical) 40%, transparent); }
+  }
+
+  /* ---------- Detail panel ---------- */
+  .detail-panel { padding: 22px 26px; overflow-y: auto; }
+  .detail-empty {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 40px 0;
+    text-align: center;
+  }
+  .detail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .detail-id { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .detail-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; margin: 4px 0 2px; }
+  .detail-sub { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-bottom: 18px; }
+  .verdict-correct { color: var(--sev-low); }
+  .verdict-wrong { color: var(--sev-critical); }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sig-amber);
+    margin: 20px 0 10px;
+  }
+  .explanation-text {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-primary);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .priority-formula {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    flex-wrap: wrap;
+  }
+  .priority-formula .op { color: var(--text-muted); }
+  .priority-formula .term { color: var(--text-primary); font-weight: 600; }
+  .priority-formula .result { margin-left: auto; color: var(--sig-amber); font-weight: 700; font-size: 16px; }
+
+  .feature-bar-row { margin-bottom: 10px; }
+  .feature-bar-label {
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .feature-bar-track {
+    position: relative;
+    height: 8px;
+    background: var(--bg-panel);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .feature-bar-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+  .feature-bar-fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+  .feature-bar-fill.pos { background: var(--sig-amber); left: 50%; }
+  .feature-bar-fill.neg { background: var(--accent-cool); right: 50%; }
+
+  .raw-features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 16px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .raw-feature-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+  .raw-feature-item .fname { color: var(--text-muted); }
+  .raw-feature-item .fval { color: var(--text-primary); }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg-base); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pulse-critical { animation: none; }
+  }
+
+  [hidden] { display: none !important; }
+
+  /* ---------- Analyze New Connection ---------- */
+  .header-row {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .btn {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .btn:hover { background: var(--bg-hover); }
+  .btn:focus-visible { outline: 2px solid var(--accent-cool); outline-offset: 1px; }
+  .btn:disabled { opacity: 0.55; cursor: wait; }
+  .btn-primary {
+    color: var(--sig-amber);
+    background: var(--sig-amber-dim);
+    border-color: color-mix(in srgb, var(--sig-amber) 40%, transparent);
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: color-mix(in srgb, var(--sig-amber) 24%, transparent); }
+
+  .analyze-panel {
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px 16px;
+  }
+  .analyze-head {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .mode-tabs { display: flex; gap: 4px; }
+  .mode-tab {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 6px 10px; cursor: pointer;
+  }
+  .mode-tab:hover { color: var(--text-primary); }
+  .mode-tab.active { color: var(--sig-amber); border-bottom-color: var(--sig-amber); }
+  .analyze-meta { display: flex; align-items: center; gap: 8px; }
+  .controls-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .controls-row .grow { flex: 1; min-width: 200px; }
+  .field-label {
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .field-input {
+    width: 100%;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 6px 8px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+  .field-input:focus { outline: 2px solid var(--accent-cool); outline-offset: 1px; }
+  .field-input.narrow { width: 72px; }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 8px 14px;
+    max-height: 290px;
+    overflow-y: auto;
+    padding: 2px 6px 2px 2px;
+  }
+  .form-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .form-field .field-label { text-transform: none; letter-spacing: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .form-field select.filter-select { padding: 6px 8px; width: 100%; }
+  .origin-text { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); flex: 1; min-width: 200px; }
+  .origin-text input { vertical-align: middle; margin-right: 4px; }
+  .sample-preview details { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+  .sample-preview summary { cursor: pointer; padding: 4px 0 8px; }
+  .sample-preview .raw-features-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); max-height: 240px; overflow-y: auto; }
+  .analyze-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .analyze-status { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+  .analyze-status.error {
+    color: var(--sev-critical); background: var(--sev-critical-dim);
+    border: 1px solid color-mix(in srgb, var(--sev-critical) 40%, transparent);
+    border-radius: 6px; padding: 6px 10px;
+  }
+  .analyze-status.loading::before {
+    content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 8px;
+    border: 2px solid var(--border); border-top-color: var(--sig-amber); border-radius: 50%;
+    vertical-align: -1px; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .live-pill { color: var(--accent-cool); background: var(--accent-cool-dim); border-color: color-mix(in srgb, var(--accent-cool) 40%, transparent); }
+  .verdict-none { color: var(--text-muted); }
+
+  /* ---------- AI threat analysis ---------- */
+  .advisory-caption {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted);
+    margin: -4px 0 10px; line-height: 1.5;
+  }
+  .advisory-card {
+    font-size: 14px; line-height: 1.55; color: var(--text-primary);
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; margin-top: 10px;
+  }
+  .advisory-card .field-label { display: block; margin: 12px 0 4px; }
+  .advisory-card .field-label:first-child { margin-top: 0; }
+  .advisory-card p { margin: 0; }
+  .advisory-card ol { margin: 0; padding-left: 20px; }
+  .advisory-card li { margin-bottom: 4px; }
+  .advisory-calm {
+    color: var(--sev-low); background: var(--sev-low-dim);
+    border: 1px solid color-mix(in srgb, var(--sev-low) 40%, transparent);
+    border-radius: 6px; padding: 8px 12px; font-size: 13.5px;
+  }
+  .advisory-model { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 12px; }
+  .advisory-disclaimer { font-size: 12.5px; font-style: italic; color: var(--text-muted); margin-top: 4px; }
+  .advisory-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .validation-note {
+    font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+    color: var(--text-secondary);
+    background: var(--accent-cool-dim);
+    border: 1px solid color-mix(in srgb, var(--accent-cool) 30%, transparent);
+    border-radius: 6px; padding: 8px 12px; margin: -8px 0 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div class="header-row">
+    <div>
+      <p class="eyebrow">Explainable AI &middot; Cyberattack Detection</p>
+      <h1>Threat Triage Console</h1>
+    </div>
+    <button class="btn btn-primary" id="analyzeToggle" aria-expanded="false" aria-controls="analyzePanel">+ Analyze New Connection</button>
+  </div>
+  <div class="stat-strip" id="statStrip"></div>
+</div>
+
+<div class="analyze-panel" id="analyzePanel" hidden>
+  <div class="analyze-head">
+    <div class="mode-tabs" role="tablist">
+      <button class="mode-tab active" data-mode="sample" role="tab">Pick a sample</button>
+      <button class="mode-tab" data-mode="manual" role="tab">Manual entry</button>
+    </div>
+    <div class="analyze-meta">
+      <label class="field-label" for="assetCrit">Asset crit. (1&ndash;5)</label>
+      <input class="field-input narrow" id="assetCrit" type="number" min="1" max="5" step="0.1" value="3">
+    </div>
+  </div>
+
+  <div id="modeSample">
+    <div class="controls-row">
+      <select class="filter-select grow" id="sampleSelect" aria-label="Unseen test connection"></select>
+      <button class="btn" id="refreshSamplesBtn">New samples</button>
+      <button class="btn" id="loadIntoFormBtn">Load into form</button>
+    </div>
+    <div class="sample-preview" id="samplePreview"></div>
+  </div>
+
+  <div id="modeManual" hidden>
+    <div class="controls-row">
+      <span class="origin-text" id="formOrigin">Fields pre-filled with training defaults.</span>
+      <button class="btn" id="loadSelectedBtn">Load selected sample</button>
+      <button class="btn" id="resetFormBtn">Reset to defaults</button>
+    </div>
+    <div class="form-grid" id="manualForm"></div>
+  </div>
+
+  <div class="analyze-actions">
+    <button class="btn btn-primary" id="analyzeBtn">Analyze</button>
+    <div class="analyze-status" id="analyzeStatus" role="status"></div>
+  </div>
+</div>
+
+<div class="app-body">
+  <div class="panel">
+    <div class="controls">
+      <input class="search-input" id="searchInput" type="text" placeholder="Search alert ID, port, feature...">
+      <select class="filter-select" id="labelFilter"></select>
+      <select class="filter-select" id="sevFilter">
+        <option value="all">All severities</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </div>
+    <div class="result-count" id="resultCount"></div>
+    <div class="alert-list" id="alertList"></div>
+  </div>
+  <div class="panel">
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-empty">Select an alert to see its explanation</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = /*__ALERTS_DATA__*/{}/*__END_DATA__*/;
+
+const summary = DATA.summary;
+const alerts = DATA.alerts;
+
+function severityBand(score) {
+  if (score >= 70) return 'critical';
+  if (score >= 45) return 'high';
+  if (score >= 20) return 'medium';
+  return 'low';
+}
+const SEV_LABEL = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+
+// ---------- Header stats ----------
+function renderStats() {
+  const chips = [
+    { label: 'Model', value: summary.model_used },
+    { label: 'Macro F1', value: summary.macro_f1, good: summary.macro_f1 >= 0.9 },
+    { label: 'AUC (OvR)', value: summary.auc_ovr_macro, good: summary.auc_ovr_macro >= 0.95 },
+    { label: 'Calib. ECE', value: summary.ece_after_calibration, good: summary.ece_after_calibration <= 0.05 },
+    { label: 'Explained', value: summary.n_alerts_sampled + '/' + summary.n_alerts_sampled, good: true },
+    { label: 'Top-10 Precision', value: summary.top10_high_severity_precision, good: summary.top10_high_severity_precision >= 0.8 },
+  ];
+  document.getElementById('statStrip').innerHTML = chips.map(c => `
+    <div class="stat-chip">
+      <div class="label">${c.label}</div>
+      <div class="value ${c.good ? 'good' : ''}">${c.value}</div>
+    </div>
+  `).join('');
+}
+
+// ---------- Filters ----------
+function populateLabelFilter() {
+  const labels = Array.from(new Set(alerts.map(a => a.predicted_label))).sort();
+  const sel = document.getElementById('labelFilter');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="all">All attack types</option>' +
+    labels.map(l => `<option value="${l}">${l}</option>`).join('');
+  if (prev && labels.includes(prev)) sel.value = prev;
+}
+
+let selectedAlertId = null;
+
+function getFiltered() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const labelF = document.getElementById('labelFilter').value;
+  const sevF = document.getElementById('sevFilter').value;
+  return alerts.filter(a => {
+    if (labelF !== 'all' && a.predicted_label !== labelF) return false;
+    if (sevF !== 'all' && severityBand(a.priority_score) !== sevF) return false;
+    if (q) {
+      const hay = (a.alert_id + ' ' + a.dest_port + ' ' + a.predicted_label + ' ' +
+        a.top_features.map(f => f.feature).join(' ')).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderList() {
+  const filtered = getFiltered();
+  document.getElementById('resultCount').textContent = `${filtered.length} alert${filtered.length === 1 ? '' : 's'} ranked by priority`;
+  const list = document.getElementById('alertList');
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="detail-empty">No alerts match these filters</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(a => {
+    const band = severityBand(a.priority_score);
+    const isSelected = a.alert_id === selectedAlertId;
+    const pulseClass = (band === 'critical') ? 'pulse-critical' : '';
+    return `
+      <div class="alert-row ${isSelected ? 'selected' : ''} ${pulseClass}" data-id="${a.alert_id}">
+        <div class="rank-badge">#${a.rank}</div>
+        <div class="row-main">
+          <div class="label-line">
+            <span class="attack-label">${a.predicted_label}</span>
+            <span class="sev-pill sev-${band}">${SEV_LABEL[band]}</span>
+            ${a.live ? '<span class="sev-pill live-pill">Live</span>' : ''}
+          </div>
+          <div class="row-meta">${a.alert_id} &middot; port ${a.dest_port}/${a.protocol} &middot; conf ${(a.confidence * 100).toFixed(1)}%</div>
+        </div>
+        <div class="priority-dial">
+          <div class="pscore">${a.priority_score.toFixed(0)}</div>
+          <div class="plabel">priority</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.alert-row').forEach(row => {
+    row.addEventListener('click', () => {
+      selectedAlertId = row.getAttribute('data-id');
+      renderList();
+      renderDetail();
+    });
+  });
+}
+
+function renderDetail() {
+  const panel = document.getElementById('detailPanel');
+  if (!selectedAlertId) {
+    panel.innerHTML = '<div class="detail-empty">Select an alert to see its explanation</div>';
+    return;
+  }
+  const a = alerts.find(x => x.alert_id === selectedAlertId);
+  if (!a) {
+    panel.innerHTML = '<div class="detail-empty">Alert no longer in filtered view</div>';
+    return;
+  }
+
+  const band = severityBand(a.priority_score);
+  let verdictClass = a.correct ? 'verdict-correct' : 'verdict-wrong';
+  let verdictText = a.correct ? 'Matches ground truth label' : `Ground truth: ${a.true_label}`;
+  if (a.live) {
+    if (a.correct === null || a.correct === undefined) {
+      verdictClass = 'verdict-none';
+      verdictText = 'No ground-truth label provided';
+    } else {
+      verdictText = a.correct
+        ? `&#10003; Predicted ${a.predicted_label} &middot; actual ${a.true_label} &mdash; match`
+        : `&#10007; Predicted ${a.predicted_label} &middot; actual ${a.true_label} &mdash; mismatch`;
+    }
+  }
+  const idLine = a.live
+    ? `${a.alert_id} &middot; ${esc(a.source)} &middot; would rank #${a.rank}`
+    : `${a.alert_id} &middot; rank #${a.rank}`;
+  const validationNote = a.live ? renderValidationNote(a.input_validation) : '';
+
+  const maxAbs = Math.max(...a.top_features.map(f => Math.abs(f.contribution)), 0.001);
+  const featureBars = a.top_features.map(f => {
+    const pct = (Math.abs(f.contribution) / maxAbs) * 50;
+    const cls = f.contribution >= 0 ? 'pos' : 'neg';
+    return `
+      <div class="feature-bar-row">
+        <div class="feature-bar-label"><span>${f.feature}</span><span>${f.contribution >= 0 ? '+' : ''}${f.contribution.toFixed(3)}</span></div>
+        <div class="feature-bar-track">
+          <div class="feature-bar-center"></div>
+          <div class="feature-bar-fill ${cls}" style="width:${pct}%"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const rawFeatures = Object.entries(a.raw_features).map(([k, v]) => `
+    <div class="raw-feature-item"><span class="fname">${k}</span><span class="fval">${typeof v === 'number' ? v.toFixed(2) : v}</span></div>
+  `).join('');
+
+  panel.innerHTML = `
+    <div class="detail-header">
+      <span class="detail-id">${idLine}</span>
+      <span class="sev-pill sev-${band}">${SEV_LABEL[band]} &middot; ${a.priority_score.toFixed(0)}</span>
+    </div>
+    <div class="detail-title">${a.predicted_label}${a.live ? ' <span class="sev-pill live-pill">Live</span>' : ''}</div>
+    <div class="detail-sub ${verdictClass}">${verdictText}</div>
+    ${validationNote}
+
+    <div class="section-label">Why this was flagged</div>
+    <div class="explanation-text">${a.explanation_text}</div>
+
+    <div class="section-label">Priority breakdown</div>
+    <div class="priority-formula">
+      <span class="term">severity ${a.base_severity}</span>
+      <span class="op">&times;</span>
+      <span class="term">confidence ${(a.confidence * 100).toFixed(0)}%</span>
+      <span class="op">&times;</span>
+      <span class="term">asset crit. ${a.asset_criticality}</span>
+      <span class="result">= ${a.priority_score.toFixed(0)}</span>
+    </div>
+
+    <div class="section-label">Top contributing features</div>
+    ${featureBars}
+
+    <div class="section-label">Raw flow features</div>
+    <div class="raw-features-grid">${rawFeatures}</div>
+
+    <div class="section-label">AI threat analysis &middot; advisory</div>
+    <div class="advisory-caption">An LLM's interpretation of the feature evidence above. The model's prediction and feature attributions remain the ground truth; this text and its countermeasures are advice only.</div>
+    <div id="advisoryBox">${renderAdvisory(a)}</div>
+  `;
+  wireAdvisoryButton(a);
+}
+
+// ---------- AI threat analysis (Gemini, via server.py /advisory) ----------
+const advisoryState = {};   // alert_id -> {status: 'loading'|'done'|'error', data?, error?}
+
+function renderAdvisory(a) {
+  const st = advisoryState[a.alert_id];
+  const loading = st && st.status === 'loading';
+  const actions = `
+    <div class="advisory-actions">
+      <button class="btn btn-primary" id="advisoryBtn" ${loading ? 'disabled' : ''}>${st && st.status === 'done' ? 'Regenerate AI Analysis' : 'Get AI Analysis'}</button>
+      ${loading ? '<div class="analyze-status loading">Consulting AI advisor…</div>' : ''}
+      ${st && st.status === 'error' ? `<div class="analyze-status error">AI advisor unavailable — ${esc(st.error)}</div>` : ''}
+    </div>`;
+  if (!st || st.status !== 'done') return actions;
+
+  const d = st.data;
+  let body;
+  if (d.status === 'no_threat') {
+    body = `<div class="advisory-calm">No malicious activity — routine monitoring sufficient.</div>`;
+  } else {
+    const cms = (d.countermeasures || []).map(c => `<li>${esc(c)}</li>`).join('');
+    body = `
+      <span class="field-label">Threat summary</span>
+      <p>${esc(d.threat_summary)}</p>
+      ${d.why_dangerous ? `<span class="field-label">Why it's dangerous</span><p>${esc(d.why_dangerous)}</p>` : ''}
+      ${cms ? `<span class="field-label">Recommended countermeasures</span><ol>${cms}</ol>` : ''}`;
+  }
+  return `
+    ${actions}
+    <div class="advisory-card">
+      ${body}
+      <div class="advisory-model">model: ${esc(d.model_used || 'none (no API call needed)')}</div>
+      <div class="advisory-disclaimer">${esc(d.disclaimer || '')}</div>
+    </div>`;
+}
+
+function refreshAdvisoryBox(a) {
+  if (selectedAlertId !== a.alert_id) return;
+  const box = document.getElementById('advisoryBox');
+  if (!box) return;
+  box.innerHTML = renderAdvisory(a);
+  wireAdvisoryButton(a);
+}
+
+function wireAdvisoryButton(a) {
+  const btn = document.getElementById('advisoryBtn');
+  if (btn) btn.addEventListener('click', () => requestAdvisory(a));
+}
+
+async function requestAdvisory(a) {
+  advisoryState[a.alert_id] = { status: 'loading' };
+  refreshAdvisoryBox(a);
+  try {
+    const d = await fetchJSON('/advisory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(a),
+    });
+    advisoryState[a.alert_id] = { status: 'done', data: d };
+  } catch (e) {
+    const reason = e.message === SERVER_DOWN_MSG ? "can't reach the detection server — make sure python server.py is running." : e.message;
+    advisoryState[a.alert_id] = { status: 'error', error: reason };
+  }
+  refreshAdvisoryBox(a);
+}
+
+// ---------- Analyze New Connection (live, via server.py) ----------
+const SERVER_DOWN_MSG = "Can't reach the detection server — make sure python server.py is running.";
+let liveSchema = null;
+let liveSamples = [];
+let liveMode = 'sample';
+let formOrigin = null;   // sample the manual form was loaded from, if any
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function renderValidationNote(v) {
+  if (!v) return '';
+  const parts = [];
+  const d = v.defaulted_fields || [];
+  if (d.length) {
+    const shown = d.slice(0, 8).join(', ') + (d.length > 8 ? `, +${d.length - 8} more` : '');
+    parts.push(`${d.length} field${d.length === 1 ? ' was' : 's were'} not provided and used training defaults: ${esc(shown)}.`);
+  }
+  const unseen = Object.entries(v.unseen_categories || {});
+  if (unseen.length) {
+    parts.push(`Not seen in training (treated as no matching category): ${unseen.map(([k, val]) => `${esc(k)}=${esc(val)}`).join(', ')}.`);
+  }
+  return parts.length ? `<div class="validation-note">Note: ${parts.join(' ')}</div>` : '';
+}
+
+async function fetchJSON(url, opts) {
+  let res;
+  try { res = await fetch(url, opts); }
+  catch (e) { throw new Error(SERVER_DOWN_MSG); }
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* non-JSON response */ }
+  if (!res.ok) throw new Error((body && body.error) || `Server returned ${res.status}`);
+  if (body === null) throw new Error(SERVER_DOWN_MSG);
+  return body;
+}
+
+function setAnalyzeStatus(msg, kind) {
+  const el = document.getElementById('analyzeStatus');
+  el.className = 'analyze-status' + (kind ? ' ' + kind : '');
+  el.textContent = msg || '';
+}
+
+async function loadSamples(randomize) {
+  const url = '/samples?n=6' + (randomize ? `&seed=${Math.floor(Math.random() * 1e6)}` : '');
+  liveSamples = await fetchJSON(url);
+  const sel = document.getElementById('sampleSelect');
+  sel.innerHTML = liveSamples.map((s, i) =>
+    `<option value="${i}">${esc(s.id)} &middot; ${esc(s.true_label)}</option>`).join('');
+  renderSamplePreview();
+}
+
+async function loadAnalyzeData() {
+  setAnalyzeStatus('Connecting to detection server…', 'loading');
+  try {
+    if (!liveSchema) {
+      liveSchema = await fetchJSON('/schema');
+      buildManualForm();
+    }
+    if (!liveSamples.length) await loadSamples(false);
+    setAnalyzeStatus('');
+  } catch (e) {
+    setAnalyzeStatus(e.message, 'error');
+  }
+}
+
+function selectedSample() {
+  const i = parseInt(document.getElementById('sampleSelect').value, 10);
+  return Number.isNaN(i) ? null : liveSamples[i];
+}
+
+function renderSamplePreview() {
+  const s = selectedSample();
+  const box = document.getElementById('samplePreview');
+  if (!s) { box.innerHTML = ''; return; }
+  const r = s.raw_connection;
+  const items = Object.entries(r).map(([k, v]) => `
+    <div class="raw-feature-item"><span class="fname">${esc(k)}</span><span class="fval">${esc(v)}</span></div>
+  `).join('');
+  box.innerHTML = `
+    <details>
+      <summary>Unseen test connection &middot; true family ${esc(s.true_label)} &middot; ${esc(r.protocol_type)}/${esc(r.service)}/${esc(r.flag)} &middot; ${Object.keys(r).length} fields (show all)</summary>
+      <div class="raw-features-grid">${items}</div>
+    </details>`;
+}
+
+function buildManualForm() {
+  document.getElementById('manualForm').innerHTML = liveSchema.fields.map(f => {
+    const label = `<label class="field-label" for="f_${f.name}" title="${esc(f.name)}">${esc(f.name)}${f.used_by_model === false ? ' (unused)' : ''}</label>`;
+    if (f.type === 'categorical') {
+      const opts = f.allowed_values.map(v =>
+        `<option value="${esc(v)}"${v === f.default ? ' selected' : ''}>${esc(v)}</option>`).join('');
+      return `<div class="form-field">${label}<select class="filter-select" id="f_${f.name}" data-field="${f.name}">${opts}</select></div>`;
+    }
+    return `<div class="form-field">${label}<input class="field-input" type="number" step="any" id="f_${f.name}" data-field="${f.name}" value="${f.default}"></div>`;
+  }).join('');
+}
+
+function fillForm(values) {
+  liveSchema.fields.forEach(f => {
+    const el = document.getElementById('f_' + f.name);
+    if (!el) return;
+    const v = values && values[f.name] !== undefined ? values[f.name] : f.default;
+    if (f.type === 'categorical' && !f.allowed_values.includes(v)) {
+      el.value = f.default;
+    } else {
+      el.value = v;
+    }
+  });
+}
+
+function renderFormOrigin() {
+  const el = document.getElementById('formOrigin');
+  if (!formOrigin) {
+    el.textContent = 'Fields pre-filled with training defaults.';
+    return;
+  }
+  el.innerHTML = `Loaded from ${esc(formOrigin.id)}. <label><input type="checkbox" id="compareTrue" checked>Compare against its true label (${esc(formOrigin.true_label)})</label>`;
+}
+
+function setMode(mode) {
+  liveMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(t => {
+    const on = t.getAttribute('data-mode') === mode;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.getElementById('modeSample').hidden = mode !== 'sample';
+  document.getElementById('modeManual').hidden = mode !== 'manual';
+}
+
+function loadSampleIntoForm() {
+  const s = selectedSample();
+  if (!s || !liveSchema) return;
+  fillForm(s.raw_connection);
+  formOrigin = s;
+  renderFormOrigin();
+  setMode('manual');
+}
+
+function collectRequest() {
+  const body = {};
+  if (liveMode === 'sample') {
+    const s = selectedSample();
+    if (!s) throw new Error(liveSamples.length ? 'No sample selected.' : SERVER_DOWN_MSG);
+    body.raw_connection = s.raw_connection;
+    body.true_label = s.true_label;
+    body._source = s.id;
+  } else {
+    if (!liveSchema) throw new Error(SERVER_DOWN_MSG);
+    const raw = {};
+    document.querySelectorAll('#manualForm [data-field]').forEach(el => {
+      const name = el.getAttribute('data-field');
+      if (el.tagName === 'SELECT') raw[name] = el.value;
+      else if (el.value.trim() !== '') raw[name] = Number(el.value);
+      // blank numeric fields are left out; the server defaults them and reports it
+    });
+    body.raw_connection = raw;
+    const cmp = document.getElementById('compareTrue');
+    if (formOrigin && cmp && cmp.checked) body.true_label = formOrigin.true_label;
+    body._source = formOrigin ? `manual (from ${formOrigin.id})` : 'manual entry';
+  }
+  const ac = parseFloat(document.getElementById('assetCrit').value);
+  if (!Number.isNaN(ac)) body.asset_criticality = ac;
+  return body;
+}
+
+function addLiveAlert(a, source) {
+  a.live = true;
+  a.source = source;
+  // Where this connection would sit in the batch ranking by priority score.
+  a.rank = 1 + alerts.filter(x => !x.live && x.priority_score > a.priority_score).length;
+  alerts.unshift(a);   // live results are pinned at the top, newest first
+  populateLabelFilter();
+  selectedAlertId = a.alert_id;
+  if (!getFiltered().some(x => x.alert_id === a.alert_id)) {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('labelFilter').value = 'all';
+    document.getElementById('sevFilter').value = 'all';
+  }
+  renderList();
+  renderDetail();
+  document.getElementById('alertList').scrollTop = 0;
+  document.getElementById('detailPanel').scrollTop = 0;
+}
+
+async function analyzeConnection() {
+  const btn = document.getElementById('analyzeBtn');
+  let body;
+  try { body = collectRequest(); }
+  catch (e) { setAnalyzeStatus(e.message, 'error'); return; }
+  const source = body._source;
+  delete body._source;
+
+  btn.disabled = true;
+  btn.textContent = 'Analyzing…';
+  setAnalyzeStatus('Running the model and SHAP explanation…', 'loading');
+  try {
+    const a = await fetchJSON('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    addLiveAlert(a, source);
+    setAnalyzeStatus(`Done: ${a.predicted_label} at ${(a.confidence * 100).toFixed(1)}% confidence, added to the top of the list as LIVE.`);
+  } catch (e) {
+    setAnalyzeStatus(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Analyze';
+  }
+}
+
+function initAnalyze() {
+  const toggle = document.getElementById('analyzeToggle');
+  const panel = document.getElementById('analyzePanel');
+  toggle.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    toggle.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+    toggle.textContent = panel.hidden ? '+ Analyze New Connection' : '− Close Analyzer';
+    if (!panel.hidden && (!liveSchema || !liveSamples.length)) loadAnalyzeData();
+  });
+  document.querySelectorAll('.mode-tab').forEach(t =>
+    t.addEventListener('click', () => setMode(t.getAttribute('data-mode'))));
+  document.getElementById('sampleSelect').addEventListener('change', renderSamplePreview);
+  document.getElementById('refreshSamplesBtn').addEventListener('click', async () => {
+    setAnalyzeStatus('Fetching new samples…', 'loading');
+    try {
+      if (!liveSchema) { liveSchema = await fetchJSON('/schema'); buildManualForm(); }
+      await loadSamples(true);
+      setAnalyzeStatus('');
+    } catch (e) { setAnalyzeStatus(e.message, 'error'); }
+  });
+  document.getElementById('loadIntoFormBtn').addEventListener('click', loadSampleIntoForm);
+  document.getElementById('loadSelectedBtn').addEventListener('click', loadSampleIntoForm);
+  document.getElementById('resetFormBtn').addEventListener('click', () => {
+    if (!liveSchema) return;
+    fillForm(null);
+    formOrigin = null;
+    renderFormOrigin();
+  });
+  document.getElementById('analyzeBtn').addEventListener('click', analyzeConnection);
+}
+
+function init() {
+  renderStats();
+  populateLabelFilter();
+  renderList();
+  renderDetail();
+  initAnalyze();
+
+  document.getElementById('searchInput').addEventListener('input', renderList);
+  document.getElementById('labelFilter').addEventListener('change', renderList);
+  document.getElementById('sevFilter').addEventListener('change', renderList);
+
+  if (alerts.length > 0) {
+    selectedAlertId = alerts[0].alert_id;
+    renderList();
+    renderDetail();
+  }
+}
+
+init();
+</script>
+</body>
+</html>

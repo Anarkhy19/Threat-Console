@@ -1,0 +1,11 @@
+Put your two NSL-KDD files in THIS folder:
+
+    KDDTrain+.txt
+    KDDTest+.txt
+
+You already have them inside archive.zip (the Kaggle NSL-KDD download).
+Unzip archive.zip and copy those two .txt files into this "data" folder.
+
+The file names must match EXACTLY (including the + sign):
+    KDDTrain+.txt
+    KDDTest+.txt
